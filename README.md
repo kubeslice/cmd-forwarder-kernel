@@ -1,2 +1,2 @@
 # cmd-forwarder-kernel
-Kernel forwarder for new NSM control plane
+Forwarder based on the Linux kernel for NSM
