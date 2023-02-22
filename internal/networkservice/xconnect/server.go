@@ -151,6 +151,10 @@ func (x *xconnectServer) Request(ctx context.Context, request *networkservice.Ne
 		// handleRemoteConnection().
 		err := handleRemoteConnection(ctx, srcConn, request, outgoing)
 		if err != nil {
+			_, errC := x.Close(ctx, srcConn)
+			if errC != nil {
+				logger.Errorf("Failed to close conn after request error: %v", errC)
+		        }
 			return nil, err
 		}
 		// If the connection was handled successfully, we need to store the dstMech. It is needed to cleanup the connection
