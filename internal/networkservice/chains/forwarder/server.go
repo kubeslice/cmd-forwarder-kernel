@@ -17,8 +17,8 @@ import (
 	"github.com/networkservicemesh/sdk/pkg/networkservice/common/discover"
 	"github.com/networkservicemesh/sdk/pkg/networkservice/common/filtermechanisms"
 	"github.com/networkservicemesh/sdk/pkg/networkservice/common/mechanisms"
-	"github.com/networkservicemesh/sdk/pkg/networkservice/common/mechanisms/recvfd"
-	"github.com/networkservicemesh/sdk/pkg/networkservice/common/mechanisms/sendfd"
+//	"github.com/networkservicemesh/sdk/pkg/networkservice/common/mechanisms/recvfd"
+//	"github.com/networkservicemesh/sdk/pkg/networkservice/common/mechanisms/sendfd"
 	"github.com/networkservicemesh/sdk/pkg/networkservice/common/mechanismtranslation"
 	"github.com/networkservicemesh/sdk/pkg/networkservice/common/roundrobin"
 	"github.com/networkservicemesh/sdk/pkg/networkservice/utils/metadata"
@@ -28,6 +28,9 @@ import (
 
 	"github.com/networkservicemesh/sdk-kernel/pkg/kernel/networkservice/connectioncontextkernel"
 
+
+	"github.com/kubeslice/cmd-forwarder-kernel/internal/networkservice/mechanisms/recvfd"
+	"github.com/kubeslice/cmd-forwarder-kernel/internal/networkservice/mechanisms/sendfd"
 	"github.com/kubeslice/cmd-forwarder-kernel/internal/networkservice/mechanisms/veth"
 	"github.com/kubeslice/cmd-forwarder-kernel/internal/networkservice/mechanisms/vxlan"
 	"github.com/kubeslice/cmd-forwarder-kernel/internal/networkservice/xconnect"
