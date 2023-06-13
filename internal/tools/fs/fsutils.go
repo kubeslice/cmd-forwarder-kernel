@@ -122,9 +122,7 @@ func GetCmdline(pid string) (string, error) {
 }
 
 func GetNetnsFilePath(inodeUrl string) (string, error) {
-	logrus.Infof("BBH: get file: inode url: %s", inodeUrl)
 	inodeNum, err := convertUrlToInode(inodeUrl)
-	logrus.Infof("BBH: inode num: %v", inodeNum)
         if err != nil {
                 return "", errors.Errorf("failed parsing inode: %s, err: %v", inodeUrl, err)
         }
@@ -133,9 +131,6 @@ func GetNetnsFilePath(inodeUrl string) (string, error) {
         if err != nil {
                 return "", errors.Wrapf(err, "failed to find file in /proc/*/ns/net with inode %d", inodeNum)
         }
-
-
-	logrus.Infof("BBH: path: %v", path)
 
 	return path, nil
 }
