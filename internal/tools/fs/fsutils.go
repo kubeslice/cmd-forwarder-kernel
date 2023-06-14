@@ -82,7 +82,6 @@ func filenameToURL(filename string) (u *url.URL, err error) {
 	return u, nil
 }
 
-
 func GetNetnsInodeFromFile(fileUrl string) (*url.URL, error) {
 	pid, err := convertUrlToPid(fileUrl)
 	if err != nil {
@@ -91,7 +90,6 @@ func GetNetnsInodeFromFile(fileUrl string) (*url.URL, error) {
 	pidstr := strconv.FormatUint(pid, 10)
 	return filenameToURL("/proc/" + pidstr + "/ns/net")
 }
-
 
 func GetAllNetNs() ([]uint64, error) {
 	files, err := ioutil.ReadDir("/proc")
@@ -123,14 +121,14 @@ func GetCmdline(pid string) (string, error) {
 
 func GetNetnsFilePath(inodeUrl string) (string, error) {
 	inodeNum, err := convertUrlToInode(inodeUrl)
-        if err != nil {
-                return "", errors.Errorf("failed parsing inode: %s, err: %v", inodeUrl, err)
-        }
-        /* Get filepath from inode */
-        path, err := ResolvePodNsByInode(inodeNum)
-        if err != nil {
-                return "", errors.Wrapf(err, "failed to find file in /proc/*/ns/net with inode %d", inodeNum)
-        }
+	if err != nil {
+		return "", errors.Errorf("failed parsing inode: %s, err: %v", inodeUrl, err)
+	}
+	/* Get filepath from inode */
+	path, err := ResolvePodNsByInode(inodeNum)
+	if err != nil {
+		return "", errors.Wrapf(err, "failed to find file in /proc/*/ns/net with inode %d", inodeNum)
+	}
 
 	return path, nil
 }
@@ -188,7 +186,6 @@ func convertUrlToPid(fileUrl string) (uint64, error) {
 	return uint64(pid), nil
 }
 
-
 // GetNetlinkHandle - mechanism to netlink.Handle for the NetNS specified in mechanism
 func GetNetlinkHandleFromURL(inodeUrl string) (*netlink.Handle, error) {
 	curNSHandle, err := currentNetNs()
@@ -209,4 +206,3 @@ func GetNetlinkHandleFromURL(inodeUrl string) (*netlink.Handle, error) {
 	}
 	return handle, nil
 }
-

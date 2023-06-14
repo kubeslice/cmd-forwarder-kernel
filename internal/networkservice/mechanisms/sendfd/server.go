@@ -64,4 +64,3 @@ func (s sendFDServer) Close(ctx context.Context, conn *networkservice.Connection
 
 	return &empty.Empty{}, nil
 }
-

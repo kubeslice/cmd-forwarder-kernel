@@ -10,7 +10,7 @@ import (
 	"github.com/networkservicemesh/api/pkg/api/networkservice"
 	"github.com/networkservicemesh/api/pkg/api/networkservice/mechanisms/kernel"
 	kernellink "github.com/networkservicemesh/sdk-kernel/pkg/kernel"
-        "github.com/networkservicemesh/sdk-kernel/pkg/kernel/tools/nshandle"
+	"github.com/networkservicemesh/sdk-kernel/pkg/kernel/tools/nshandle"
 	"github.com/networkservicemesh/sdk/pkg/tools/log"
 
 	"github.com/kubeslice/cmd-forwarder-kernel/internal/tools/link"

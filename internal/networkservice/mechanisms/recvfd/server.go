@@ -107,5 +107,3 @@ func (r *recvFDServer) closeFiles(conn *networkservice.Connection) {
 		delete(fileMap.filesByInodeURL, inodeURLStr)
 	}
 }
-
-

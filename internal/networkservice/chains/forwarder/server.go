@@ -26,7 +26,6 @@ import (
 
 	"github.com/networkservicemesh/sdk-kernel/pkg/kernel/networkservice/connectioncontextkernel"
 
-
 	"github.com/kubeslice/cmd-forwarder-kernel/internal/networkservice/mechanisms/recvfd"
 	"github.com/kubeslice/cmd-forwarder-kernel/internal/networkservice/mechanisms/sendfd"
 	"github.com/kubeslice/cmd-forwarder-kernel/internal/networkservice/mechanisms/veth"

@@ -21,8 +21,8 @@ package sendfd
 import (
 	"net/url"
 
-	"github.com/networkservicemesh/api/pkg/api/networkservice/mechanisms/common"
 	"github.com/kubeslice/cmd-forwarder-kernel/internal/tools/fs"
+	"github.com/networkservicemesh/api/pkg/api/networkservice/mechanisms/common"
 	"github.com/pkg/errors"
 )
 
@@ -58,4 +58,3 @@ func swapFileToInode(parameters, inodeURLToFileURLMap map[string]string) error {
 	inodeURLToFileURLMap[inodeURL.String()] = fileURLStr
 	return nil
 }
-

@@ -23,8 +23,8 @@ import (
 	"net/url"
 	"sync"
 
-	"github.com/networkservicemesh/api/pkg/api/networkservice/mechanisms/common"
 	"github.com/kubeslice/cmd-forwarder-kernel/internal/tools/fs"
+	"github.com/networkservicemesh/api/pkg/api/networkservice/mechanisms/common"
 	"github.com/pkg/errors"
 )
 
@@ -62,7 +62,7 @@ func recvFDAndSwapInodeToFile(ctx context.Context, fileMap *perConnectionFileMap
 		}
 		fileMap.filesByInodeURL[inodeURL.String()] = file
 	}
-        // Swap out the inodeURL for a fileURL in the parameters
+	// Swap out the inodeURL for a fileURL in the parameters
 	fileURL := &url.URL{Scheme: "file", Path: file}
 	parameters[common.InodeURL] = fileURL.String()
 
@@ -90,21 +90,20 @@ func swapFileToInode(fileMap *perConnectionFileMap, parameters map[string]string
 		return nil
 	}
 
-        // Do we have an inodeURL to translate it back to?
-		inodeURL, ok := fileMap.inodeURLbyFilename[fileURL.Path]
-		if !ok {
-			return nil
-		}
-		// Swap the fileURL for the inodeURL in parameters
-		parameters[common.InodeURL] = inodeURL.String()
+	// Do we have an inodeURL to translate it back to?
+	inodeURL, ok := fileMap.inodeURLbyFilename[fileURL.Path]
+	if !ok {
+		return nil
+	}
+	// Swap the fileURL for the inodeURL in parameters
+	parameters[common.InodeURL] = inodeURL.String()
 
-		// This is used to clean up files sent by MechanismPreferences that were *not* selected to be the
-		// connection mechanism
-		for inodeURLStr, _ := range fileMap.filesByInodeURL {
-			if inodeURLStr != inodeURL.String() {
-				delete(fileMap.filesByInodeURL, inodeURLStr)
-			}
+	// This is used to clean up files sent by MechanismPreferences that were *not* selected to be the
+	// connection mechanism
+	for inodeURLStr, _ := range fileMap.filesByInodeURL {
+		if inodeURLStr != inodeURL.String() {
+			delete(fileMap.filesByInodeURL, inodeURLStr)
 		}
+	}
 	return nil
 }
-

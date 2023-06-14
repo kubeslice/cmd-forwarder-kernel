@@ -86,4 +86,3 @@ func (r *recvFDClient) Close(ctx context.Context, conn *networkservice.Connectio
 
 	return &empty.Empty{}, nil
 }
-
