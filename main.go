@@ -60,6 +60,7 @@ type Config struct {
 	Labels           map[string]string `default:"p2p:true" desc:"Labels related to this forwarder instance"`
 	NSName           string            `default:"forwarder" desc:"Name of Network Service to Register with Registry"`
 	TunnelIP         string            `desc:"IP or CIDR to use for vxlan tunnels" split_words:"true"`
+	TunnelPort       string            `desc:"Port number to use for vxlan tunnels" split_words:"true"`
 	ConnectTo        url.URL           `default:"unix:///connect.to.socket" desc:"url to connect to" split_words:"true"`
 	LogLevel         string            `default:"INFO" desc:"Log level" split_words:"true"`
 	MaxTokenLifetime time.Duration     `default:"24h" desc:"maximum lifetime of tokens" split_words:"true"`

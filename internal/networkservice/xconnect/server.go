@@ -100,7 +100,7 @@ func (x *xconnectServer) Request(ctx context.Context, request *networkservice.Ne
 	// The mechanismmetadata cache contains remote mechanism info that is stored by the xconnect.Client.
 	dstMech, _ := mechanismmetadata.Load(ctx, true)
 	srcMech := conn.GetMechanism()
-	logger.Debug("srcMech: %v, dstMech: %v", srcMech, dstMech)
+	logger.Debugf("srcMech: %v, dstMech: %v", srcMech, dstMech)
 
 	// Check if the connection is LOCAL or REMOTE
 	// If both the local and remote connection mechanisms are LOCAL, the connection request is considered to be LOCAL.
@@ -154,7 +154,7 @@ func (x *xconnectServer) Request(ctx context.Context, request *networkservice.Ne
 			_, errC := x.Close(ctx, srcConn)
 			if errC != nil {
 				logger.Errorf("Failed to close conn after request error: %v", errC)
-		        }
+			}
 			return nil, err
 		}
 		// If the connection was handled successfully, we need to store the dstMech. It is needed to cleanup the connection

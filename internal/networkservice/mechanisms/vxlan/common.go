@@ -3,6 +3,8 @@ package vxlan
 import (
 	"context"
 	"net"
+	"os"
+	"strconv"
 
 	"github.com/networkservicemesh/api/pkg/api/networkservice"
 	vxlanMech "github.com/networkservicemesh/api/pkg/api/networkservice/mechanisms/vxlan"
@@ -93,7 +95,7 @@ func Create(ctx context.Context, conn *networkservice.Connection, outgoing bool)
 
 		// Create the vxlan link in the host network namespace. It will be inserted into the target namespace later on in the func.
 		fwdNsIfaceName := getVxlanLinkName(conn.GetId())
-		if err := netlink.LinkAdd(newVXLAN(fwdNsIfaceName, egressIP, remoteIP, int(vni))); err != nil {
+		if err := netlink.LinkAdd(newVXLAN(ctx, fwdNsIfaceName, egressIP, remoteIP, int(vni))); err != nil {
 			return errors.Wrapf(err, "failed to create VXLAN interface")
 		}
 
@@ -251,7 +253,13 @@ func linuxIfaceName(ifaceName string) string {
 	return ifaceName[:kernel.LinuxIfMaxLength]
 }
 
-func newVXLAN(ifaceName string, egressIP, remoteIP net.IP, vni int) *netlink.Vxlan {
+func newVXLAN(ctx context.Context, ifaceName string, egressIP, remoteIP net.IP, vni int) *netlink.Vxlan {
+	logger := log.FromContext(ctx).WithField("vxlan", "init")
+	vxlanPortNum, err := strconv.Atoi(os.Getenv("NSM_TUNNEL_PORT"))
+	if err != nil {
+		vxlanPortNum = vxlanDefaultPort
+		logger.Debugf("Vxlan port not provided. Using default value: %v\n", vxlanPortNum)
+	}
 	/* Populate the VXLAN interface configuration */
 	return &netlink.Vxlan{
 		LinkAttrs: netlink.LinkAttrs{
@@ -259,6 +267,7 @@ func newVXLAN(ifaceName string, egressIP, remoteIP net.IP, vni int) *netlink.Vxl
 		},
 		VxlanId: vni,
 		Group:   remoteIP,
+		Port:    vxlanPortNum,
 		SrcAddr: egressIP,
 	}
 }
