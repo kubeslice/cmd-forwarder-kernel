@@ -190,6 +190,9 @@ func closeConnection(ctx context.Context, conn *networkservice.Connection) error
 		return nil
 	}
 	srcMech := conn.GetMechanism()
+	if srcMech == nil {
+		return nil
+	}
 
 	if srcMech.Cls == "LOCAL" && dstMech.Cls == "LOCAL" {
 		srcConn := conn.Clone()

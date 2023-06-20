@@ -94,9 +94,6 @@ func (a *authorizeClient) Close(ctx context.Context, conn *networkservice.Connec
 	if ok && p != nil {
 		ctx = peer.NewContext(ctx, p)
 	}
-	if err := a.policies.check(ctx, conn.GetPath()); err != nil {
-		return nil, err
-	}
 
 	return next.Client(ctx).Close(ctx, conn, opts...)
 }
