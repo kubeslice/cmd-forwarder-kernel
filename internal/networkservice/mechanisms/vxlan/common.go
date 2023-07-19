@@ -116,22 +116,25 @@ func Create(ctx context.Context, conn *networkservice.Connection, outgoing bool)
 
 		log.FromContext(ctx).WithField("link.Name", fwdNsIfaceName).WithField("netlink", "LinkAdd vxlan").Debug("completed")
 
-		var ifaceConfig = map[string]bool{
-			"tx-checksum-ip-generic": false,
-			"tx-checksum-ipv4":       false,
-			"tx-checksum-ipv6":       false,
-			"tx-checksum-sctp":       false,
-			"tx-checksum-fcoe-crc":   false,
-		}
+		if os.Getenv("NSM_VXLAN_CHECKSUM_OFFLOAD") == "disable" {
 
-		err = ethtoolSetTxOff(fwdNsIfaceName, ifaceConfig)
-		if err != nil {
-			// This is a best effort operation. Some platforms might not have the checksum features
-			// we are looking to turn off.
-			log.FromContext(ctx).
-				WithField("link.Name", fwdNsIfaceName).
-				WithField("err", err).
-				WithField("netlink", "LinkSetTxOff").Debug("error")
+			var ifaceConfig = map[string]bool{
+				"tx-checksum-ip-generic": false,
+				"tx-checksum-ipv4":       false,
+				"tx-checksum-ipv6":       false,
+				"tx-checksum-sctp":       false,
+				"tx-checksum-fcoe-crc":   false,
+			}
+
+			err = ethtoolSetTxOff(fwdNsIfaceName, ifaceConfig)
+			if err != nil {
+				// This is a best effort operation. Some platforms might not have the checksum features
+				// we are looking to turn off.
+				log.FromContext(ctx).
+					WithField("link.Name", fwdNsIfaceName).
+					WithField("err", err).
+					WithField("netlink", "LinkSetTxOff").Debug("error")
+			}
 		}
 
 		l, err := netlink.LinkByName(fwdNsIfaceName)
