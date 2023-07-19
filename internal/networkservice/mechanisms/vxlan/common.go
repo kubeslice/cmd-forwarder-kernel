@@ -17,9 +17,24 @@ import (
 	"github.com/networkservicemesh/sdk-kernel/pkg/kernel/tools/nshandle"
 
 	"github.com/kubeslice/cmd-forwarder-kernel/internal/tools/link"
-
+	"github.com/safchain/ethtool"
 	"github.com/vishvananda/netlink"
 )
+
+func ethtoolSetTxOff(iface string, config map[string]bool) error {
+	ethHandle, err := ethtool.NewEthtool()
+	if err != nil {
+		return err
+	}
+	defer ethHandle.Close()
+
+	err = ethHandle.Change(iface, config)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
 
 func Create(ctx context.Context, conn *networkservice.Connection, outgoing bool) error {
 	logger := log.FromContext(ctx).WithField("vxlan", "Intf create")
@@ -100,6 +115,27 @@ func Create(ctx context.Context, conn *networkservice.Connection, outgoing bool)
 		}
 
 		log.FromContext(ctx).WithField("link.Name", fwdNsIfaceName).WithField("netlink", "LinkAdd vxlan").Debug("completed")
+
+		if os.Getenv("NSM_VXLAN_CHECKSUM_OFFLOAD") == "disable" {
+
+			var ifaceConfig = map[string]bool{
+				"tx-checksum-ip-generic": false,
+				"tx-checksum-ipv4":       false,
+				"tx-checksum-ipv6":       false,
+				"tx-checksum-sctp":       false,
+				"tx-checksum-fcoe-crc":   false,
+			}
+
+			err = ethtoolSetTxOff(fwdNsIfaceName, ifaceConfig)
+			if err != nil {
+				// This is a best effort operation. Some platforms might not have the checksum features
+				// we are looking to turn off.
+				log.FromContext(ctx).
+					WithField("link.Name", fwdNsIfaceName).
+					WithField("err", err).
+					WithField("netlink", "LinkSetTxOff").Debug("error")
+			}
+		}
 
 		l, err := netlink.LinkByName(fwdNsIfaceName)
 		if err != nil {
