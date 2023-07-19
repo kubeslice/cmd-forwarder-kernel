@@ -40,7 +40,9 @@ require (
 	github.com/networkservicemesh/sdk-ovs v1.6.0 // indirect
 	github.com/networkservicemesh/sdk-vpp v1.6.1 // indirect
 	github.com/open-policy-agent/opa v0.44.0 // indirect
+	github.com/projectcalico/calico v3.21.1+incompatible // indirect
 	github.com/rcrowley/go-metrics v0.0.0-20201227073835-cf1acfcdf475 // indirect
+	github.com/safchain/ethtool v0.3.0 // indirect
 	github.com/tchap/go-patricia/v2 v2.3.1 // indirect
 	github.com/thanhpk/randstr v1.0.4 // indirect
 	github.com/vishvananda/netns v0.0.0-20211101163701-50045581ed74 // indirect
@@ -62,7 +64,7 @@ require (
 	go.opentelemetry.io/proto/otlp v0.19.0 // indirect
 	golang.org/x/crypto v0.0.0-20220829220503-c86fa9a7ed90 // indirect
 	golang.org/x/net v0.0.0-20220907135653-1e95f45603a7 // indirect
-	golang.org/x/sys v0.0.0-20220908164124-27713097b956 // indirect
+	golang.org/x/sys v0.6.0 // indirect
 	golang.org/x/text v0.3.7 // indirect
 	google.golang.org/genproto v0.0.0-20220908141613-51c1cc9bc6d0 // indirect
 	google.golang.org/protobuf v1.28.1 // indirect
