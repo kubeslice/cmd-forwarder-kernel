@@ -21,6 +21,7 @@ package recvfd
 import (
 	"context"
 	"net/url"
+	"os"
 	"sync"
 
 	"github.com/kubeslice/cmd-forwarder-kernel/internal/tools/fs"
@@ -53,8 +54,16 @@ func recvFDAndSwapInodeToFile(ctx context.Context, fileMap *perConnectionFileMap
 		return nil
 	}
 
+	fileNotPresentOnSystem := false
 	file, ok := fileMap.filesByInodeURL[inodeURLStr]
-	if !ok {
+	if ok {
+		// Check if the file is present
+		_, err := os.Stat(file)
+		if err != nil {
+			fileNotPresentOnSystem = true
+		}
+	}
+	if !ok || fileNotPresentOnSystem {
 		var err error
 		file, err = fs.GetNetnsFilePath(inodeURLStr)
 		if err != nil {
