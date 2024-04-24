@@ -51,7 +51,7 @@ func NewNetworkServiceRegistryClient(ctx context.Context, opts ...Option) regist
 				clientconn.NewNetworkServiceRegistryClient(),
 				dial.NewNetworkServiceRegistryClient(ctx,
 					dial.WithDialOptions(clientOpts.dialOptions...),
-					dial.WithDialTimeout(time.Second),
+					dial.WithDialTimeout(5*time.Second),
 				),
 			},
 			append(
