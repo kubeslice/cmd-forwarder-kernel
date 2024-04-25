@@ -59,11 +59,13 @@ func ResolvePodNsByInode(inode uint64) (string, error) {
 				continue
 			}
 			if tryInode == inode {
+				cmdFound, _ := GetCmdline(name)
+				logrus.Infof("Found a pod attached to the inode: %v, filename: %v", cmdFound, filename)
 				return filename, nil
 			}
 		}
 	}
-	logrus.Errorf("Could not find pod attached to inode. inode: %v", inode)
+
 	return "", errors.New("not found")
 }
 

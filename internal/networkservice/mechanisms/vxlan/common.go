@@ -8,7 +8,7 @@ import (
 
 	"github.com/networkservicemesh/api/pkg/api/networkservice"
 	vxlanMech "github.com/networkservicemesh/api/pkg/api/networkservice/mechanisms/vxlan"
-	"github.com/sirupsen/logrus"
+	"github.com/networkservicemesh/sdk/pkg/tools/log"
 
 	"github.com/pkg/errors"
 
@@ -37,7 +37,7 @@ func ethtoolSetTxOff(iface string, config map[string]bool) error {
 }
 
 func Create(ctx context.Context, conn *networkservice.Connection, outgoing bool) error {
-	logger := logrus.WithField("vxlan", "Intf create")
+	logger := log.FromContext(ctx).WithField("vxlan", "Intf create")
 	if mechanism := vxlanMech.ToMechanism(conn.GetMechanism()); mechanism != nil {
 		if mechanism.GetParameters() == nil {
 			return errors.Errorf("vxlan parameters not provided")
@@ -98,27 +98,14 @@ func Create(ctx context.Context, conn *networkservice.Connection, outgoing bool)
 
 		// Forwarder is not aware of the link since it is not present in the cache.
 		// Delete the previous kernel interface if there is one in the target namespace, it could be a stale/dangling interface.
-		var prevLink netlink.Link = nil
-		linksInNs, err := handle.LinkList()
-		if err != nil {
-			logrus.
-				WithField("err", err).
-				WithField("netlink", "LinkList").Debug("error")
-			return err
-		}
-		for _, lnk := range linksInNs {
-			if lnk.Attrs().Name == ifaceName {
-				prevLink = lnk
-				break
-			}
-		}
-		if prevLink != nil {
+		var prevLink netlink.Link
+		if prevLink, err = handle.LinkByName(ifaceName); err == nil {
 			if err = handle.LinkDel(prevLink); err != nil {
 				return errors.WithStack(err)
 			}
-			logrus.
+			log.FromContext(ctx).
 				WithField("link.Name", prevLink.Attrs().Name).
-				WithField("netlink", "LinkDel").Debug("prev link del completed")
+				WithField("netlink", "LinkDel").Debug("completed")
 		}
 
 		// Create the vxlan link in the host network namespace. It will be inserted into the target namespace later on in the func.
@@ -127,7 +114,7 @@ func Create(ctx context.Context, conn *networkservice.Connection, outgoing bool)
 			return errors.Wrapf(err, "failed to create VXLAN interface")
 		}
 
-		logrus.WithField("link.Name", fwdNsIfaceName).WithField("netlink", "LinkAdd vxlan").Debug("completed")
+		log.FromContext(ctx).WithField("link.Name", fwdNsIfaceName).WithField("netlink", "LinkAdd vxlan").Debug("completed")
 
 		if os.Getenv("NSM_VXLAN_CHECKSUM_OFFLOAD") == "disable" {
 
@@ -143,19 +130,19 @@ func Create(ctx context.Context, conn *networkservice.Connection, outgoing bool)
 			if err != nil {
 				// This is a best effort operation. Some platforms might not have the checksum features
 				// we are looking to turn off.
-				logrus.
+				log.FromContext(ctx).
 					WithField("link.Name", fwdNsIfaceName).
 					WithField("err", err).
-					WithField("netlink", "LinkSetTxOff").Error("error")
+					WithField("netlink", "LinkSetTxOff").Debug("error")
 			}
 		}
 
 		l, err := netlink.LinkByName(fwdNsIfaceName)
 		if err != nil {
-			logrus.
+			log.FromContext(ctx).
 				WithField("link.Name", fwdNsIfaceName).
 				WithField("err", err).
-				WithField("netlink", "LinkByName").Error("error")
+				WithField("netlink", "LinkByName").Debug("error")
 			return errors.WithStack(err)
 		}
 
@@ -170,29 +157,29 @@ func Create(ctx context.Context, conn *networkservice.Connection, outgoing bool)
 		if err = netlink.LinkSetNsFd(l, int(nsHandle)); err != nil {
 			return errors.Wrapf(err, "unable to change to netns")
 		}
-		logrus.
+		log.FromContext(ctx).
 			WithField("link.Name", l.Attrs().Name).
 			WithField("netlink", "LinkSetNsFd").Debug("completed")
 
 		l, err = handle.LinkByName(l.Attrs().Name)
 		if err != nil {
-			logrus.
+			log.FromContext(ctx).
 				WithField("link.Name", l.Attrs().Name).
 				WithField("err", err).
-				WithField("netlink", "LinkByName").Error("error")
+				WithField("netlink", "LinkByName").Debug("error")
 		}
 
 		// Set the LinkName to the name specified in the request. The link in the target namespace
 		// would have this name assigned to it.
 		if err = handle.LinkSetName(l, ifaceName); err != nil {
-			logrus.
+			log.FromContext(ctx).
 				WithField("link.Name", l.Attrs().Name).
 				WithField("link.NewName", ifaceName).
 				WithField("err", err).
-				WithField("netlink", "LinkSetName").Error("error")
+				WithField("netlink", "LinkSetName").Debug("error")
 			return errors.WithStack(err)
 		}
-		logrus.
+		log.FromContext(ctx).
 			WithField("link.Name", l.Attrs().Name).
 			WithField("link.NewName", ifaceName).
 			WithField("netlink", "LinkSetName").Debug("completed")
@@ -204,7 +191,7 @@ func Create(ctx context.Context, conn *networkservice.Connection, outgoing bool)
 				if err = handle.LinkSetAlias(l, linkAlias); err != nil {
 					return errors.WithStack(err)
 				}
-				logrus.
+				log.FromContext(ctx).
 					WithField("link.Name", l.Attrs().Name).
 					WithField("alias", linkAlias).
 					WithField("netlink", "LinkSetAlias").Debug("completed")
@@ -216,7 +203,7 @@ func Create(ctx context.Context, conn *networkservice.Connection, outgoing bool)
 		if err != nil {
 			return errors.WithStack(err)
 		}
-		logrus.
+		log.FromContext(ctx).
 			WithField("link.Name", l.Attrs().Name).
 			WithField("netlink", "LinkSetUp").Debug("completed")
 
@@ -253,7 +240,7 @@ func Delete(ctx context.Context, conn *networkservice.Connection, outgoing bool)
 
 		links, err := handle.LinkList()
 		if err != nil {
-			logrus.
+			log.FromContext(ctx).
 				WithField("err", err).
 				WithField("netlink", "LinkList").Debug("error")
 			return err
@@ -268,7 +255,7 @@ func Delete(ctx context.Context, conn *networkservice.Connection, outgoing bool)
 		}
 
 		if linkToDel == nil {
-			logrus.
+			log.FromContext(ctx).
 				WithField("link.Name", ifaceName).
 				WithField("netlink", "LinkByName").Debug("NotFound")
 			return nil
@@ -276,13 +263,13 @@ func Delete(ctx context.Context, conn *networkservice.Connection, outgoing bool)
 
 		err = handle.LinkDel(linkToDel)
 		if err != nil {
-			logrus.
+			log.FromContext(ctx).
 				WithField("link.Name", linkToDel.Attrs().Name).
 				WithField("err", err).
-				WithField("netlink", "LinkDel").Error("error")
+				WithField("netlink", "LinkDel").Debug("error")
 			return errors.WithStack(err)
 		}
-		logrus.
+		log.FromContext(ctx).
 			WithField("link.Name", linkToDel.Attrs().Name).
 			WithField("netlink", "LinkDel").Info("completed")
 		link.Delete(ctx, outgoing)
@@ -303,7 +290,7 @@ func linuxIfaceName(ifaceName string) string {
 }
 
 func newVXLAN(ctx context.Context, ifaceName string, egressIP, remoteIP net.IP, vni int) *netlink.Vxlan {
-	logger := logrus.WithField("vxlan", "init")
+	logger := log.FromContext(ctx).WithField("vxlan", "init")
 	vxlanPortNum, err := strconv.Atoi(os.Getenv("NSM_TUNNEL_PORT"))
 	if err != nil {
 		vxlanPortNum = vxlanDefaultPort

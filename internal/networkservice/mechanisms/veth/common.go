@@ -11,7 +11,7 @@ import (
 	"github.com/networkservicemesh/api/pkg/api/networkservice/mechanisms/kernel"
 	kernellink "github.com/networkservicemesh/sdk-kernel/pkg/kernel"
 	"github.com/networkservicemesh/sdk-kernel/pkg/kernel/tools/nshandle"
-	"github.com/sirupsen/logrus"
+	"github.com/networkservicemesh/sdk/pkg/tools/log"
 
 	"github.com/kubeslice/cmd-forwarder-kernel/internal/tools/link"
 
@@ -44,7 +44,7 @@ func getVethLinkNamePair(conn *networkservice.Connection, isSrc bool) (string, s
 
 func Create(ctx context.Context, conn *networkservice.Connection, isSrc bool) error {
 	if mechanism := kernel.ToMechanism(conn.GetMechanism()); mechanism != nil {
-		logrus.Debugf("veth create: isSrc: %v, mech: %v", isSrc, mechanism)
+		log.FromContext(ctx).Infof("veth create: isSrc: %v, mech: %v", isSrc, mechanism)
 
 		// Construct the netlink handle for the target namespace for this kernel interface
 		handle, err := kernellink.GetNetlinkHandle(mechanism.GetNetNSURL())
@@ -55,7 +55,7 @@ func Create(ctx context.Context, conn *networkservice.Connection, isSrc bool) er
 
 		// Check if the link is present in the cache. If present, the create request can be ignored.
 		if linkCached, ok := link.Load(ctx, isSrc); ok {
-			logrus.Debugf("veth create: link found in cache: isSrc: %v, linkCached: %v", isSrc, linkCached)
+			log.FromContext(ctx).Debug("veth create: link found in cache: isSrc: %v, linkCached: %v", isSrc, linkCached)
 			if _, err = handle.LinkByName(mechanism.GetInterfaceName()); err == nil {
 				return nil
 			}
@@ -68,7 +68,9 @@ func Create(ctx context.Context, conn *networkservice.Connection, isSrc bool) er
 			if err = handle.LinkDel(prevLink); err != nil {
 				return errors.WithStack(err)
 			}
-			logrus.WithField("link.Name", prevLink.Attrs().Name).WithField("duration", time.Since(now)).
+			log.FromContext(ctx).
+				WithField("link.Name", prevLink.Attrs().Name).
+				WithField("duration", time.Since(now)).
 				WithField("netlink", "LinkDel").Debug("completed")
 		}
 
@@ -92,7 +94,7 @@ func Create(ctx context.Context, conn *networkservice.Connection, isSrc bool) er
 			if addErr := netlink.LinkAdd(l); addErr != nil {
 				return addErr
 			}
-			logrus.
+			log.FromContext(ctx).
 				WithField("link.Name", l.Attrs().Name).
 				WithField("link.PeerName", veth.PeerName).
 				WithField("duration", time.Since(now)).
@@ -102,11 +104,11 @@ func Create(ctx context.Context, conn *networkservice.Connection, isSrc bool) er
 		now := time.Now()
 		l, err = netlink.LinkByName(linkName)
 		if err != nil {
-			logrus.
+			log.FromContext(ctx).
 				WithField("duration", time.Since(now)).
 				WithField("link.Name", linkName).
 				WithField("err", err).
-				WithField("netlink", "LinkByName").Error("error")
+				WithField("netlink", "LinkByName").Debug("error")
 			return errors.WithStack(err)
 		}
 
@@ -122,7 +124,7 @@ func Create(ctx context.Context, conn *networkservice.Connection, isSrc bool) er
 		if err = netlink.LinkSetNsFd(l, int(nsHandle)); err != nil {
 			return errors.Wrapf(err, "unable to change to netns")
 		}
-		logrus.
+		log.FromContext(ctx).
 			WithField("link.Name", l.Attrs().Name).
 			WithField("duration", time.Since(now)).
 			WithField("netlink", "LinkSetNsFd").Debug("completed")
@@ -132,14 +134,14 @@ func Create(ctx context.Context, conn *networkservice.Connection, isSrc bool) er
 		name := l.Attrs().Name
 		l, err = handle.LinkByName(name)
 		if err != nil {
-			logrus.
+			log.FromContext(ctx).
 				WithField("duration", time.Since(now)).
 				WithField("link.Name", name).
 				WithField("err", err).
-				WithField("netlink", "LinkByName").Error("error")
+				WithField("netlink", "LinkByName").Debug("error")
 			return errors.WithStack(err)
 		}
-		logrus.
+		log.FromContext(ctx).
 			WithField("duration", time.Since(now)).
 			WithField("link.Name", name).
 			WithField("netlink", "LinkByName").Debug("completed")
@@ -148,15 +150,15 @@ func Create(ctx context.Context, conn *networkservice.Connection, isSrc bool) er
 		// Set the LinkName
 		now = time.Now()
 		if err = handle.LinkSetName(l, name); err != nil {
-			logrus.
+			log.FromContext(ctx).
 				WithField("link.Name", l.Attrs().Name).
 				WithField("link.NewName", name).
 				WithField("duration", time.Since(now)).
 				WithField("err", err).
-				WithField("netlink", "LinkSetName").Error("error")
+				WithField("netlink", "LinkSetName").Debug("error")
 			return errors.WithStack(err)
 		}
-		logrus.
+		log.FromContext(ctx).
 			WithField("link.Name", l.Attrs().Name).
 			WithField("link.NewName", name).
 			WithField("duration", time.Since(now)).
@@ -170,7 +172,7 @@ func Create(ctx context.Context, conn *networkservice.Connection, isSrc bool) er
 				if err = handle.LinkSetAlias(l, linkAlias); err != nil {
 					return errors.WithStack(err)
 				}
-				logrus.
+				log.FromContext(ctx).
 					WithField("link.Name", l.Attrs().Name).
 					WithField("alias", linkAlias).
 					WithField("duration", time.Since(now)).
@@ -184,7 +186,7 @@ func Create(ctx context.Context, conn *networkservice.Connection, isSrc bool) er
 		if err != nil {
 			return errors.WithStack(err)
 		}
-		logrus.
+		log.FromContext(ctx).
 			WithField("link.Name", l.Attrs().Name).
 			WithField("duration", time.Since(now)).
 			WithField("netlink", "LinkSetUp").Debug("completed")
@@ -197,7 +199,7 @@ func Create(ctx context.Context, conn *networkservice.Connection, isSrc bool) er
 
 func Delete(ctx context.Context, conn *networkservice.Connection, isSrc bool) error {
 	if mechanism := kernel.ToMechanism(conn.GetMechanism()); mechanism != nil {
-		logrus.Infof("veth delete: isSrc: %v, mech: %v", isSrc, mechanism)
+		log.FromContext(ctx).Infof("veth delete: isSrc: %v, mech: %v", isSrc, mechanism)
 		// Construct the netlink handle for the target namespace for this kernel interface
 		handle, err := kernellink.GetNetlinkHandle(mechanism.GetNetNSURL())
 		if err != nil {
@@ -207,9 +209,9 @@ func Delete(ctx context.Context, conn *networkservice.Connection, isSrc bool) er
 
 		links, err := handle.LinkList()
 		if err != nil {
-			logrus.
+			log.FromContext(ctx).
 				WithField("err", err).
-				WithField("netlink", "LinkList").Error("error")
+				WithField("netlink", "LinkList").Debug("error")
 			return err
 		}
 
@@ -222,7 +224,7 @@ func Delete(ctx context.Context, conn *networkservice.Connection, isSrc bool) er
 		}
 
 		if linkToDel == nil {
-			logrus.
+			log.FromContext(ctx).
 				WithField("link.Name", mechanism.GetInterfaceName()).
 				WithField("netlink", "LinkByName").Debug("NotFound")
 			return nil
@@ -230,13 +232,13 @@ func Delete(ctx context.Context, conn *networkservice.Connection, isSrc bool) er
 
 		err = handle.LinkDel(linkToDel)
 		if err != nil {
-			logrus.
+			log.FromContext(ctx).
 				WithField("link.Name", linkToDel.Attrs().Name).
 				WithField("err", err).
-				WithField("netlink", "LinkDel").Error("error")
+				WithField("netlink", "LinkDel").Debug("error")
 			return errors.WithStack(err)
 		}
-		logrus.
+		log.FromContext(ctx).
 			WithField("link.Name", linkToDel.Attrs().Name).
 			WithField("netlink", "LinkDel").Debug("completed")
 
