@@ -7,7 +7,7 @@ import (
 	"github.com/networkservicemesh/api/pkg/api/networkservice"
 	"github.com/networkservicemesh/sdk-kernel/pkg/kernel/networkservice/connectioncontextkernel"
 	"github.com/networkservicemesh/sdk/pkg/networkservice/core/next"
-	"github.com/networkservicemesh/sdk/pkg/tools/log"
+	"github.com/sirupsen/logrus"
 
 	"github.com/kubeslice/cmd-forwarder-kernel/internal/networkservice/mechanisms/veth"
 	"github.com/kubeslice/cmd-forwarder-kernel/internal/networkservice/mechanisms/vxlan"
@@ -84,7 +84,7 @@ func handleRemoteConnection(ctx context.Context, srcConn *networkservice.Connect
 }
 
 func (x *xconnectServer) Request(ctx context.Context, request *networkservice.NetworkServiceRequest) (*networkservice.Connection, error) {
-	logger := log.FromContext(ctx).WithField("xconnectServer", "Request")
+	logger := logrus.WithField("xconnectServer", "Request")
 
 	conn, err := next.Server(ctx).Request(ctx, request)
 	if err != nil {
@@ -100,7 +100,17 @@ func (x *xconnectServer) Request(ctx context.Context, request *networkservice.Ne
 	// The mechanismmetadata cache contains remote mechanism info that is stored by the xconnect.Client.
 	dstMech, _ := mechanismmetadata.Load(ctx, true)
 	srcMech := conn.GetMechanism()
-	logger.Debugf("srcMech: %v, dstMech: %v", srcMech, dstMech)
+
+	nscId := request.Connection.GetId()
+	reqLabels := request.Connection.GetLabels()
+	if reqLabels != nil {
+		_, ok := reqLabels["podName"]
+		if ok {
+			nscId = reqLabels["podName"]
+		}
+	}
+
+	logger.Debugf("id: %v, srcMech: %v, dstMech: %v", nscId, srcMech, dstMech)
 
 	// Check if the connection is LOCAL or REMOTE
 	// If both the local and remote connection mechanisms are LOCAL, the connection request is considered to be LOCAL.
@@ -110,6 +120,7 @@ func (x *xconnectServer) Request(ctx context.Context, request *networkservice.Ne
 		dstConn := createConnectionWithMechanism(dstMech, conn)
 		err := handleLocalConnection(ctx, srcConn, dstConn, request)
 		if err != nil {
+			logger.Debugf("Failed to handle local conn. srcConn: %v, dstConn: %v", srcConn, dstConn)
 			return nil, err
 		}
 		// If the connection was handled successfully, we need to store the dstMech. It is needed to cleanup the connection
@@ -151,6 +162,7 @@ func (x *xconnectServer) Request(ctx context.Context, request *networkservice.Ne
 		// handleRemoteConnection().
 		err := handleRemoteConnection(ctx, srcConn, request, outgoing)
 		if err != nil {
+			logger.Debugf("Failed to handle remote conn. err: %v, outgoing: %v, srcConn: %v", err, outgoing, srcConn)
 			_, errC := x.Close(ctx, srcConn)
 			if errC != nil {
 				logger.Errorf("Failed to close conn after request error: %v", errC)
@@ -169,6 +181,7 @@ func (x *xconnectServer) Request(ctx context.Context, request *networkservice.Ne
 			connCtxClient := connectioncontextkernel.NewClient()
 			_, err := connCtxClient.Request(ctx, req2)
 			if err != nil {
+				logger.Errorf("Failed to set params on intf. err: %v, dstMech: %v", err, dstMech)
 				return nil, err
 			}
 		}
@@ -185,6 +198,8 @@ func (x *xconnectServer) Close(ctx context.Context, conn *networkservice.Connect
 }
 
 func closeConnection(ctx context.Context, conn *networkservice.Connection) error {
+	logger := logrus.WithField("xconnectServer", "Close")
+
 	dstMech := mechanismmetadata.LoadAndDelete(ctx, false)
 	if dstMech == nil {
 		return nil
@@ -196,6 +211,7 @@ func closeConnection(ctx context.Context, conn *networkservice.Connection) error
 		dstConn := createConnectionWithMechanism(dstMech, conn)
 		err := deleteLocalConnection(ctx, srcConn, dstConn)
 		if err != nil {
+			logger.Errorf("Failed to delete local conn. err: %v, srcConn: %v, dstConn: %v", err, srcConn, dstConn)
 			return err
 		}
 	} else {
@@ -225,6 +241,7 @@ func closeConnection(ctx context.Context, conn *networkservice.Connection) error
 		outgoing := conn.GetMechanism().GetCls() == "LOCAL"
 		err := deleteRemoteConnection(ctx, srcConn, outgoing)
 		if err != nil {
+			logger.Errorf("Failed to delete remote conn. err: %v, srcConn: %v", err, srcConn)
 			return err
 		}
 	}
