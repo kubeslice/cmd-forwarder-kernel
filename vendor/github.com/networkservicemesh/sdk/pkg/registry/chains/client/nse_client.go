@@ -19,7 +19,7 @@ package client
 
 import (
 	"context"
-	"time"
+        "time"
 
 	"github.com/networkservicemesh/api/pkg/api/registry"
 
@@ -54,7 +54,7 @@ func NewNetworkServiceEndpointRegistryClient(ctx context.Context, opts ...Option
 				clientconn.NewNetworkServiceEndpointRegistryClient(),
 				dial.NewNetworkServiceEndpointRegistryClient(ctx,
 					dial.WithDialOptions(clientOpts.dialOptions...),
-					dial.WithDialTimeout(5*time.Second),
+                                        dial.WithDialTimeout(5*time.Second),
 				),
 			},
 			append(
