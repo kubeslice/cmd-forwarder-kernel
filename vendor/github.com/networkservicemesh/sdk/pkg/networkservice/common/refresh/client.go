@@ -133,7 +133,7 @@ func after(ctx context.Context, conn *networkservice.Connection) time.Duration {
 	scale := 1. / 3.
 	path := conn.GetPath()
 	if len(path.PathSegments) > 1 {
-		scale = 0.4 + 0.4*float64(path.Index)/float64(len(path.PathSegments))
+                scale = 0.4 + 0.4*float64(path.Index)/float64(len(path.PathSegments))
 	}
 	duration := time.Duration(float64(*minTimeout) * scale)
 
