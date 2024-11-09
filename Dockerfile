@@ -13,7 +13,7 @@ COPY . .
 RUN go env -w GOPRIVATE=github.com/kubeslice && \
     CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GO111MODULE=on go build -mod=vendor -a -o /bin/kernel-forwarder .
 
-FROM alpine:3.16.2 as runtime
+FROM alpine:3.17.10 as runtime
 COPY --from=build /bin/kernel-forwarder /bin/kernel-forwarder
 
 ENTRYPOINT ["/bin/kernel-forwarder"]
