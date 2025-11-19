@@ -16,7 +16,7 @@ import (
 // "ideal" width and returns the shortened paths by replacing the middle parts of paths
 // with "...", ex: bundle1/.../a/b/policy.rego
 func TruncateFilePaths(maxIdealWidth, maxWidth int, path ...string) (map[string]string, int) {
-	var canShorten [][]byte
+	canShorten := make([][]byte, 0, len(path))
 
 	for _, p := range path {
 		canShorten = append(canShorten, []byte(getPathFromFirstSeparator(p)))
@@ -57,10 +57,18 @@ func TruncateFilePaths(maxIdealWidth, maxWidth int, path ...string) (map[string]
 		}
 
 		// Drop the overall length down to match our substitution
-		longestLocation = longestLocation - (len(lcs) - 3)
+		longestLocation -= (len(lcs) - 3)
 	}
 
 	return result, longestLocation
+}
+
+func Truncate(str string, maxWidth int) string {
+	if len(str) <= maxWidth {
+		return str
+	}
+
+	return str[:maxWidth-3] + "..."
 }
 
 func getPathFromFirstSeparator(path string) string {

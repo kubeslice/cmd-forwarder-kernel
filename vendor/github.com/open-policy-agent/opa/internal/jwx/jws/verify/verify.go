@@ -5,9 +5,8 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
+	"errors"
 	"fmt"
-
-	"github.com/pkg/errors"
 
 	"github.com/open-policy-agent/opa/internal/jwx/jwa"
 )
@@ -23,7 +22,7 @@ func New(alg jwa.SignatureAlgorithm) (Verifier, error) {
 	case jwa.HS256, jwa.HS384, jwa.HS512:
 		return newHMAC(alg)
 	default:
-		return nil, errors.Errorf(`unsupported signature algorithm: %s`, alg)
+		return nil, fmt.Errorf(`unsupported signature algorithm: %s`, alg)
 	}
 }
 
@@ -35,7 +34,7 @@ func GetSigningKey(key string, alg jwa.SignatureAlgorithm) (interface{}, error) 
 	case jwa.RS256, jwa.RS384, jwa.RS512, jwa.PS256, jwa.PS384, jwa.PS512, jwa.ES256, jwa.ES384, jwa.ES512:
 		block, _ := pem.Decode([]byte(key))
 		if block == nil {
-			return nil, fmt.Errorf("failed to parse PEM block containing the key")
+			return nil, errors.New("failed to parse PEM block containing the key")
 		}
 
 		pub, err := x509.ParsePKIXPublicKey(block.Bytes)
@@ -52,6 +51,6 @@ func GetSigningKey(key string, alg jwa.SignatureAlgorithm) (interface{}, error) 
 	case jwa.HS256, jwa.HS384, jwa.HS512:
 		return []byte(key), nil
 	default:
-		return nil, errors.Errorf("unsupported signature algorithm: %s", alg)
+		return nil, fmt.Errorf("unsupported signature algorithm: %s", alg)
 	}
 }
