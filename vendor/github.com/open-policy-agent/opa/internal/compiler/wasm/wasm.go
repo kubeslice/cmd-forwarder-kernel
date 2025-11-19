@@ -12,23 +12,23 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/open-policy-agent/opa/ast"
 	"github.com/open-policy-agent/opa/internal/compiler/wasm/opa"
 	"github.com/open-policy-agent/opa/internal/debug"
-	"github.com/open-policy-agent/opa/internal/ir"
 	"github.com/open-policy-agent/opa/internal/wasm/encoding"
 	"github.com/open-policy-agent/opa/internal/wasm/instruction"
 	"github.com/open-policy-agent/opa/internal/wasm/module"
 	"github.com/open-policy-agent/opa/internal/wasm/types"
 	"github.com/open-policy-agent/opa/internal/wasm/util"
-	opatypes "github.com/open-policy-agent/opa/types"
+	"github.com/open-policy-agent/opa/v1/ast"
+	"github.com/open-policy-agent/opa/v1/ir"
+	opatypes "github.com/open-policy-agent/opa/v1/types"
 )
 
 // Record Wasm ABI version in exported global variable
 const (
 	opaWasmABIVersionVal      = 1
 	opaWasmABIVersionVar      = "opa_wasm_abi_version"
-	opaWasmABIMinorVersionVal = 2
+	opaWasmABIMinorVersionVal = 3
 	opaWasmABIMinorVersionVar = "opa_wasm_abi_minor_version"
 )
 
@@ -139,8 +139,10 @@ var builtinsFunctions = map[string]string{
 	ast.JSONIsValid.Name:                "opa_json_is_valid",
 	ast.ObjectFilter.Name:               "builtin_object_filter",
 	ast.ObjectGet.Name:                  "builtin_object_get",
+	ast.ObjectKeys.Name:                 "builtin_object_keys",
 	ast.ObjectRemove.Name:               "builtin_object_remove",
 	ast.ObjectUnion.Name:                "builtin_object_union",
+	ast.ObjectUnionN.Name:               "builtin_object_union_n",
 	ast.Concat.Name:                     "opa_strings_concat",
 	ast.FormatInt.Name:                  "opa_strings_format_int",
 	ast.IndexOf.Name:                    "opa_strings_indexof",
@@ -322,11 +324,8 @@ func (c *Compiler) Compile() (*module.Module, error) {
 // are about to be compiled.
 func (c *Compiler) initModule() error {
 
-	bs, err := opa.Bytes()
-	if err != nil {
-		return err
-	}
-
+	bs := opa.Bytes()
+	var err error
 	c.module, err = encoding.ReadModule(bytes.NewReader(bs))
 	if err != nil {
 		return err
@@ -341,7 +340,7 @@ func (c *Compiler) initModule() error {
 		// two times. But let's deal with that when it happens.
 		if _, ok := c.funcs[name]; ok { // already seen
 			c.debug.Printf("function name duplicate: %s (%d)", name, fn.Index)
-			name = name + ".1"
+			name += ".1"
 		}
 		c.funcs[name] = fn.Index
 	}
@@ -349,7 +348,7 @@ func (c *Compiler) initModule() error {
 	for _, fn := range c.policy.Funcs.Funcs {
 
 		params := make([]types.ValueType, len(fn.Params))
-		for i := 0; i < len(params); i++ {
+		for i := range params {
 			params[i] = types.I32
 		}
 
@@ -606,7 +605,7 @@ func (c *Compiler) writeExternalFuncNames(buf *bytes.Buffer) {
 
 	for _, decl := range c.policy.Static.BuiltinFuncs {
 		if _, ok := builtinsFunctions[decl.Name]; !ok {
-			addr := int32(buf.Len()) + int32(c.stringOffset)
+			addr := int32(buf.Len()) + c.stringOffset
 			buf.WriteString(decl.Name)
 			buf.WriteByte(0)
 			c.externalFuncNameAddrs[decl.Name] = addr
@@ -618,7 +617,7 @@ func (c *Compiler) writeEntrypointNames(buf *bytes.Buffer) {
 	c.entrypointNameAddrs = make(map[string]int32)
 
 	for _, plan := range c.policy.Plans.Plans {
-		addr := int32(buf.Len()) + int32(c.stringOffset)
+		addr := int32(buf.Len()) + c.stringOffset
 		buf.WriteString(plan.Name)
 		buf.WriteByte(0)
 		c.entrypointNameAddrs[plan.Name] = addr
@@ -828,7 +827,7 @@ func (c *Compiler) compileFunc(fn *ir.Func) error {
 	memoize := len(fn.Params) == 2
 
 	if len(fn.Params) == 0 {
-		return fmt.Errorf("illegal function: zero args")
+		return errors.New("illegal function: zero args")
 	}
 
 	c.nextLocal = 0
@@ -889,18 +888,15 @@ func (c *Compiler) compileFunc(fn *ir.Func) error {
 }
 
 func mapFunc(mapping ast.Object, fn *ir.Func, index int) (ast.Object, bool) {
-	curr := ast.NewObject()
-	curr.Insert(ast.StringTerm(fn.Path[len(fn.Path)-1]), ast.IntNumberTerm(index))
+	curr := ast.NewObject(ast.Item(ast.StringTerm(fn.Path[len(fn.Path)-1]), ast.IntNumberTerm(index)))
 	for i := len(fn.Path) - 2; i >= 0; i-- {
-		o := ast.NewObject()
-		o.Insert(ast.StringTerm(fn.Path[i]), ast.NewTerm(curr))
-		curr = o
+		curr = ast.NewObject(ast.Item(ast.StringTerm(fn.Path[i]), ast.NewTerm(curr)))
 	}
 	return mapping.Merge(curr)
 }
 
 func (c *Compiler) emitMappingAndStartFunc() error {
-	var indices []uint32
+	indices := make([]uint32, 0, len(c.policy.Funcs.Funcs))
 	var ok bool
 	mapping := ast.NewObject()
 
@@ -1000,12 +996,16 @@ func (c *Compiler) compileBlock(block *ir.Block) ([]instruction.Instruction, err
 	for _, stmt := range block.Stmts {
 		switch stmt := stmt.(type) {
 		case *ir.ResultSetAddStmt:
-			instrs = append(instrs, instruction.GetLocal{Index: c.lrs})
-			instrs = append(instrs, instruction.GetLocal{Index: c.local(stmt.Value)})
-			instrs = append(instrs, instruction.Call{Index: c.function(opaSetAdd)})
+			instrs = append(instrs,
+				instruction.GetLocal{Index: c.lrs},
+				instruction.GetLocal{Index: c.local(stmt.Value)},
+				instruction.Call{Index: c.function(opaSetAdd)},
+			)
 		case *ir.ReturnLocalStmt:
-			instrs = append(instrs, instruction.GetLocal{Index: c.local(stmt.Source)})
-			instrs = append(instrs, instruction.Return{})
+			instrs = append(instrs,
+				instruction.GetLocal{Index: c.local(stmt.Source)},
+				instruction.Return{},
+			)
 		case *ir.BlockStmt:
 			for i := range stmt.Blocks {
 				block, err := c.compileBlock(stmt.Blocks[i])
@@ -1033,8 +1033,10 @@ func (c *Compiler) compileBlock(block *ir.Block) ([]instruction.Instruction, err
 				return instrs, err
 			}
 		case *ir.AssignVarStmt:
-			instrs = append(instrs, c.instrRead(stmt.Source))
-			instrs = append(instrs, instruction.SetLocal{Index: c.local(stmt.Target)})
+			instrs = append(instrs,
+				c.instrRead(stmt.Source),
+				instruction.SetLocal{Index: c.local(stmt.Target)},
+			)
 		case *ir.AssignVarOnceStmt:
 			instrs = append(instrs, instruction.Block{
 				Instrs: []instruction.Instruction{
@@ -1089,27 +1091,11 @@ func (c *Compiler) compileBlock(block *ir.Block) ([]instruction.Instruction, err
 			instrs = append(instrs, instruction.Call{Index: c.function(opaNumberSize)})
 			instrs = append(instrs, instruction.SetLocal{Index: c.local(stmt.Target)})
 		case *ir.EqualStmt:
-			if stmt.A != stmt.B { // constants, or locals, being equal here can skip the check
-				instrs = append(instrs, c.instrRead(stmt.A))
-				instrs = append(instrs, c.instrRead(stmt.B))
-				instrs = append(instrs, instruction.Call{Index: c.function(opaValueCompare)})
-				instrs = append(instrs, instruction.BrIf{Index: 0})
-			}
+			instrs = append(instrs, c.instrRead(stmt.A))
+			instrs = append(instrs, c.instrRead(stmt.B))
+			instrs = append(instrs, instruction.Call{Index: c.function(opaValueCompare)})
+			instrs = append(instrs, instruction.BrIf{Index: 0})
 		case *ir.NotEqualStmt:
-			if stmt.A == stmt.B { // same local, same bool constant, or same string constant
-				instrs = append(instrs, instruction.Br{Index: 0})
-				continue
-			}
-			_, okA := stmt.A.Value.(ir.Bool)
-			if _, okB := stmt.B.Value.(ir.Bool); okA && okB {
-				// not equal (checked above), but both booleans => not equal
-				continue
-			}
-			_, okA = stmt.A.Value.(ir.StringIndex)
-			if _, okB := stmt.B.Value.(ir.StringIndex); okA && okB {
-				// not equal (checked above), but both strings => not equal
-				continue
-			}
 			instrs = append(instrs, c.instrRead(stmt.A))
 			instrs = append(instrs, c.instrRead(stmt.B))
 			instrs = append(instrs, instruction.Call{Index: c.function(opaValueCompare)})
@@ -1153,6 +1139,17 @@ func (c *Compiler) compileBlock(block *ir.Block) ([]instruction.Instruction, err
 				instrs = append(instrs, instruction.GetLocal{Index: c.local(loc)})
 				instrs = append(instrs, instruction.Call{Index: c.function(opaValueType)})
 				instrs = append(instrs, instruction.I32Const{Value: opaTypeObject})
+				instrs = append(instrs, instruction.I32Ne{})
+				instrs = append(instrs, instruction.BrIf{Index: 0})
+			} else {
+				instrs = append(instrs, instruction.Br{Index: 0})
+				break
+			}
+		case *ir.IsSetStmt:
+			if loc, ok := stmt.Source.Value.(ir.Local); ok {
+				instrs = append(instrs, instruction.GetLocal{Index: c.local(loc)})
+				instrs = append(instrs, instruction.Call{Index: c.function(opaValueType)})
+				instrs = append(instrs, instruction.I32Const{Value: opaTypeSet})
 				instrs = append(instrs, instruction.I32Ne{})
 				instrs = append(instrs, instruction.BrIf{Index: 0})
 			} else {
@@ -1341,7 +1338,7 @@ func (c *Compiler) compileWithStmt(with *ir.WithStmt, result *[]instruction.Inst
 	return nil
 }
 
-func (c *Compiler) compileUpsert(local ir.Local, path []int, value ir.Operand, loc ir.Location, instrs []instruction.Instruction) []instruction.Instruction {
+func (c *Compiler) compileUpsert(local ir.Local, path []int, value ir.Operand, _ ir.Location, instrs []instruction.Instruction) []instruction.Instruction {
 
 	lcopy := c.genLocal() // holds copy of local
 	instrs = append(instrs, instruction.GetLocal{Index: c.local(local)})
@@ -1369,7 +1366,7 @@ func (c *Compiler) compileUpsert(local ir.Local, path []int, value ir.Operand, l
 	// Initialize the locals that specify the path of the upsert operation.
 	lpath := make(map[int]uint32, len(path))
 
-	for i := 0; i < len(path); i++ {
+	for i := range path {
 		lpath[i] = c.genLocal()
 		instrs = append(instrs, instruction.I32Const{Value: c.opaStringAddr(path[i])})
 		instrs = append(instrs, instruction.SetLocal{Index: lpath[i]})
@@ -1378,10 +1375,10 @@ func (c *Compiler) compileUpsert(local ir.Local, path []int, value ir.Operand, l
 	// Generate a block that traverses the path of the upsert operation,
 	// shallowing copying values at each step as needed. Stop before the final
 	// segment that will only be inserted.
-	var inner []instruction.Instruction
+	inner := make([]instruction.Instruction, 0, len(path)*21+1)
 	ltemp := c.genLocal()
 
-	for i := 0; i < len(path)-1; i++ {
+	for i := range len(path) - 1 {
 
 		// Lookup the next part of the path.
 		inner = append(inner, instruction.GetLocal{Index: lcopy})
@@ -1417,10 +1414,10 @@ func (c *Compiler) compileUpsert(local ir.Local, path []int, value ir.Operand, l
 	inner = append(inner, instruction.Br{Index: uint32(len(path) - 1)})
 
 	// Generate blocks that handle missing nodes during traversal.
-	var block []instruction.Instruction
+	block := make([]instruction.Instruction, 0, len(path)*10)
 	lval := c.genLocal()
 
-	for i := 0; i < len(path)-1; i++ {
+	for i := range len(path) - 1 {
 		block = append(block, instruction.Block{Instrs: inner})
 		block = append(block, instruction.Call{Index: c.function(opaObject)})
 		block = append(block, instruction.SetLocal{Index: lval})
@@ -1544,8 +1541,7 @@ func (c *Compiler) compileExternalCall(stmt *ir.CallStmt, ef externalFunc, resul
 	}
 
 	instrs := *result
-	instrs = append(instrs, instruction.I32Const{Value: ef.ID})
-	instrs = append(instrs, instruction.I32Const{Value: 0}) // unused context parameter
+	instrs = append(instrs, instruction.I32Const{Value: ef.ID}, instruction.I32Const{Value: 0}) // unused context parameter
 
 	for _, arg := range stmt.Args {
 		instrs = append(instrs, c.instrRead(arg))
@@ -1554,9 +1550,11 @@ func (c *Compiler) compileExternalCall(stmt *ir.CallStmt, ef externalFunc, resul
 	instrs = append(instrs, instruction.Call{Index: c.function(builtinDispatchers[len(stmt.Args)])})
 
 	if ef.Decl.Result() != nil {
-		instrs = append(instrs, instruction.TeeLocal{Index: c.local(stmt.Result)})
-		instrs = append(instrs, instruction.I32Eqz{})
-		instrs = append(instrs, instruction.BrIf{Index: 0})
+		instrs = append(instrs,
+			instruction.TeeLocal{Index: c.local(stmt.Result)},
+			instruction.I32Eqz{},
+			instruction.BrIf{Index: 0},
+		)
 	} else {
 		instrs = append(instrs, instruction.Drop{})
 	}
@@ -1687,7 +1685,7 @@ func (c *Compiler) genLocal() uint32 {
 func (c *Compiler) function(name string) uint32 {
 	fidx, ok := c.funcs[name]
 	if !ok {
-		panic(fmt.Sprintf("function not found: %s", name))
+		panic("function not found: " + name)
 	}
 	return fidx
 }

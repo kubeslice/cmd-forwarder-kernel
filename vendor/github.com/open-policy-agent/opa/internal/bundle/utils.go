@@ -6,12 +6,16 @@ package bundle
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
+	"os"
+	"path/filepath"
 
-	"github.com/open-policy-agent/opa/ast"
-	"github.com/open-policy-agent/opa/bundle"
-	"github.com/open-policy-agent/opa/resolver/wasm"
-	"github.com/open-policy-agent/opa/storage"
+	"github.com/open-policy-agent/opa/v1/ast"
+	"github.com/open-policy-agent/opa/v1/bundle"
+	"github.com/open-policy-agent/opa/v1/resolver/wasm"
+	"github.com/open-policy-agent/opa/v1/storage"
 )
 
 // LoadWasmResolversFromStore will lookup all Wasm modules from the store along with the
@@ -82,4 +86,62 @@ func LoadWasmResolversFromStore(ctx context.Context, store storage.Store, txn st
 		}
 	}
 	return resolvers, nil
+}
+
+// LoadBundleFromDisk loads a previously persisted activated bundle from disk
+func LoadBundleFromDisk(path, name string, bvc *bundle.VerificationConfig) (*bundle.Bundle, error) {
+	return LoadBundleFromDiskForRegoVersion(ast.RegoV0, path, name, bvc)
+}
+
+func LoadBundleFromDiskForRegoVersion(regoVersion ast.RegoVersion, path, name string, bvc *bundle.VerificationConfig) (*bundle.Bundle, error) {
+	bundlePath := filepath.Join(path, name, "bundle.tar.gz")
+
+	_, err := os.Stat(bundlePath)
+	if err == nil {
+		f, err := os.Open(bundlePath)
+		if err != nil {
+			return nil, err
+		}
+		defer f.Close()
+
+		r := bundle.NewCustomReader(bundle.NewTarballLoaderWithBaseURL(f, "")).
+			WithRegoVersion(regoVersion)
+
+		if bvc != nil {
+			r = r.WithBundleVerificationConfig(bvc)
+		}
+
+		b, err := r.Read()
+		if err != nil {
+			return nil, err
+		}
+		return &b, nil
+	} else if os.IsNotExist(err) {
+		return nil, nil
+	}
+
+	return nil, err
+}
+
+// SaveBundleToDisk saves the given raw bytes representing the bundle's content to disk
+func SaveBundleToDisk(path string, raw io.Reader) (string, error) {
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		err = os.MkdirAll(path, os.ModePerm)
+		if err != nil {
+			return "", err
+		}
+	}
+
+	if raw == nil {
+		return "", errors.New("no raw bundle bytes to persist to disk")
+	}
+
+	dest, err := os.CreateTemp(path, ".bundle.tar.gz.*.tmp")
+	if err != nil {
+		return "", err
+	}
+	defer dest.Close()
+
+	_, err = io.Copy(dest, raw)
+	return dest.Name(), err
 }

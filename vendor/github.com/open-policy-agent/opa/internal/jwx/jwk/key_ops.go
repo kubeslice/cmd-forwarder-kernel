@@ -2,9 +2,8 @@ package jwk
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
-
-	"github.com/pkg/errors"
 )
 
 // KeyUsageType is used to denote what this key should be used for
@@ -46,7 +45,7 @@ func (keyOperationList *KeyOperationList) Accept(v interface{}) error {
 		*keyOperationList = x
 		return nil
 	default:
-		return errors.Errorf(`invalid value %T`, v)
+		return fmt.Errorf(`invalid value %T`, v)
 	}
 }
 
@@ -55,12 +54,12 @@ func (keyOperationList *KeyOperationList) UnmarshalJSON(data []byte) error {
 	var tempKeyOperationList []string
 	err := json.Unmarshal(data, &tempKeyOperationList)
 	if err != nil {
-		return fmt.Errorf("invalid key operation")
+		return errors.New("invalid key operation")
 	}
 	for _, value := range tempKeyOperationList {
 		_, ok := keyOps[value]
 		if !ok {
-			return fmt.Errorf("unknown key operation")
+			return errors.New("unknown key operation")
 		}
 		*keyOperationList = append(*keyOperationList, KeyOperation(value))
 	}

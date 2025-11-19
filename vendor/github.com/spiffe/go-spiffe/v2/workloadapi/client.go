@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/x509"
 	"errors"
-	"fmt"
 	"time"
 
 	"github.com/spiffe/go-spiffe/v2/bundle/jwtbundle"
@@ -29,7 +28,8 @@ type Client struct {
 	config   clientConfig
 }
 
-// New dials the Workload API and returns a client.
+// New dials the Workload API and returns a client. The client should be closed
+// when no longer in use to free underlying resources.
 func New(ctx context.Context, options ...ClientOption) (*Client, error) {
 	c := &Client{
 		config: defaultClientConfig(),
@@ -119,7 +119,7 @@ func (c *Client) FetchX509Bundles(ctx context.Context) (*x509bundle.Set, error) 
 // WatchX509Bundles watches for changes to the X.509 bundles. The watcher receives
 // the updated X.509 bundles.
 func (c *Client) WatchX509Bundles(ctx context.Context, watcher X509BundleWatcher) error {
-	backoff := newBackoff()
+	backoff := c.config.backoffStrategy.NewBackoff()
 	for {
 		err := c.watchX509Bundles(ctx, watcher, backoff)
 		watcher.OnX509BundlesWatchError(err)
@@ -152,7 +152,7 @@ func (c *Client) FetchX509Context(ctx context.Context) (*X509Context, error) {
 // WatchX509Context watches for updates to the X.509 context. The watcher
 // receives the updated X.509 context.
 func (c *Client) WatchX509Context(ctx context.Context, watcher X509ContextWatcher) error {
-	backoff := newBackoff()
+	backoff := c.config.backoffStrategy.NewBackoff()
 	for {
 		err := c.watchX509Context(ctx, watcher, backoff)
 		watcher.OnX509ContextWatchError(err)
@@ -224,7 +224,7 @@ func (c *Client) FetchJWTBundles(ctx context.Context) (*jwtbundle.Set, error) {
 // WatchJWTBundles watches for changes to the JWT bundles. The watcher receives
 // the updated JWT bundles.
 func (c *Client) WatchJWTBundles(ctx context.Context, watcher JWTBundleWatcher) error {
-	backoff := newBackoff()
+	backoff := c.config.backoffStrategy.NewBackoff()
 	for {
 		err := c.watchJWTBundles(ctx, watcher, backoff)
 		watcher.OnJWTBundlesWatchError(err)
@@ -255,10 +255,10 @@ func (c *Client) ValidateJWTSVID(ctx context.Context, token, audience string) (*
 func (c *Client) newConn(ctx context.Context) (*grpc.ClientConn, error) {
 	c.config.dialOptions = append(c.config.dialOptions, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	c.appendDialOptionsOS()
-	return grpc.DialContext(ctx, c.config.address, c.config.dialOptions...)
+	return grpc.DialContext(ctx, c.config.address, c.config.dialOptions...) //nolint:staticcheck // preserve backcompat with WithDialOptions option
 }
 
-func (c *Client) handleWatchError(ctx context.Context, err error, backoff *backoff) error {
+func (c *Client) handleWatchError(ctx context.Context, err error, backoff Backoff) error {
 	code := status.Code(err)
 	if code == codes.Canceled {
 		return err
@@ -270,7 +270,7 @@ func (c *Client) handleWatchError(ctx context.Context, err error, backoff *backo
 	}
 
 	c.config.log.Errorf("Failed to watch the Workload API: %v", err)
-	retryAfter := backoff.Duration()
+	retryAfter := backoff.Next()
 	c.config.log.Debugf("Retrying watch in %s", retryAfter)
 	select {
 	case <-time.After(retryAfter):
@@ -281,7 +281,7 @@ func (c *Client) handleWatchError(ctx context.Context, err error, backoff *backo
 	}
 }
 
-func (c *Client) watchX509Context(ctx context.Context, watcher X509ContextWatcher, backoff *backoff) error {
+func (c *Client) watchX509Context(ctx context.Context, watcher X509ContextWatcher, backoff Backoff) error {
 	ctx, cancel := context.WithCancel(withHeader(ctx))
 	defer cancel()
 
@@ -308,7 +308,7 @@ func (c *Client) watchX509Context(ctx context.Context, watcher X509ContextWatche
 	}
 }
 
-func (c *Client) watchJWTBundles(ctx context.Context, watcher JWTBundleWatcher, backoff *backoff) error {
+func (c *Client) watchJWTBundles(ctx context.Context, watcher JWTBundleWatcher, backoff Backoff) error {
 	ctx, cancel := context.WithCancel(withHeader(ctx))
 	defer cancel()
 
@@ -335,7 +335,7 @@ func (c *Client) watchJWTBundles(ctx context.Context, watcher JWTBundleWatcher, 
 	}
 }
 
-func (c *Client) watchX509Bundles(ctx context.Context, watcher X509BundleWatcher, backoff *backoff) error {
+func (c *Client) watchX509Bundles(ctx context.Context, watcher X509BundleWatcher, backoff Backoff) error {
 	ctx, cancel := context.WithCancel(withHeader(ctx))
 	defer cancel()
 
@@ -402,7 +402,8 @@ func withHeader(ctx context.Context) context.Context {
 
 func defaultClientConfig() clientConfig {
 	return clientConfig{
-		log: logger.Null,
+		log:             logger.Null,
+		backoffStrategy: defaultBackoffStrategy{},
 	}
 }
 
@@ -425,7 +426,7 @@ func parseX509Context(resp *workload.X509SVIDResponse) (*X509Context, error) {
 
 // parseX509SVIDs parses one or all of the SVIDs in the response. If firstOnly
 // is true, then only the first SVID in the response is parsed and returned.
-// Otherwise all SVIDs are parsed and returned.
+// Otherwise, all SVIDs are parsed and returned.
 func parseX509SVIDs(resp *workload.X509SVIDResponse, firstOnly bool) ([]*x509svid.SVID, error) {
 	n := len(resp.Svids)
 	if n == 0 {
@@ -435,13 +436,23 @@ func parseX509SVIDs(resp *workload.X509SVIDResponse, firstOnly bool) ([]*x509svi
 		n = 1
 	}
 
+	hints := make(map[string]struct{}, n)
 	svids := make([]*x509svid.SVID, 0, n)
 	for i := 0; i < n; i++ {
 		svid := resp.Svids[i]
+		// In the event of more than one X509SVID message with the same hint value set, then the first message in the
+		// list SHOULD be selected.
+		if _, ok := hints[svid.Hint]; ok && svid.Hint != "" {
+			continue
+		}
+
+		hints[svid.Hint] = struct{}{}
+
 		s, err := x509svid.ParseRaw(svid.X509Svid, svid.X509SvidKey)
 		if err != nil {
 			return nil, err
 		}
+		s.Hint = svid.Hint
 		svids = append(svids, s)
 	}
 
@@ -478,9 +489,6 @@ func parseX509Bundle(spiffeID string, bundle []byte) (*x509bundle.Bundle, error)
 	if err != nil {
 		return nil, err
 	}
-	if len(certs) == 0 {
-		return nil, fmt.Errorf("empty X.509 bundle for trust domain %q", td)
-	}
 	return x509bundle.FromX509Authorities(td, certs), nil
 }
 
@@ -505,7 +513,7 @@ func parseX509BundlesResponse(resp *workload.X509BundlesResponse) (*x509bundle.S
 
 // parseJWTSVIDs parses one or all of the SVIDs in the response. If firstOnly
 // is true, then only the first SVID in the response is parsed and returned.
-// Otherwise all SVIDs are parsed and returned.
+// Otherwise, all SVIDs are parsed and returned.
 func parseJWTSVIDs(resp *workload.JWTSVIDResponse, audience []string, firstOnly bool) ([]*jwtsvid.SVID, error) {
 	n := len(resp.Svids)
 	if n == 0 {
@@ -515,13 +523,22 @@ func parseJWTSVIDs(resp *workload.JWTSVIDResponse, audience []string, firstOnly 
 		n = 1
 	}
 
+	hints := make(map[string]struct{}, n)
 	svids := make([]*jwtsvid.SVID, 0, n)
 	for i := 0; i < n; i++ {
 		svid := resp.Svids[i]
+		// In the event of more than one X509SVID message with the same hint value set, then the first message in the
+		// list SHOULD be selected.
+		if _, ok := hints[svid.Hint]; ok && svid.Hint != "" {
+			continue
+		}
+		hints[svid.Hint] = struct{}{}
+
 		s, err := jwtsvid.ParseInsecure(svid.Svid, audience)
 		if err != nil {
 			return nil, err
 		}
+		s.Hint = svid.Hint
 		svids = append(svids, s)
 	}
 

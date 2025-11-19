@@ -7,6 +7,7 @@ package encoding
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -229,7 +230,7 @@ func writeFunctionSection(w io.Writer, s module.FunctionSection) error {
 	}
 
 	for _, idx := range s.TypeIndices {
-		if err := leb128.WriteVarUint32(&buf, uint32(idx)); err != nil {
+		if err := leb128.WriteVarUint32(&buf, idx); err != nil {
 			return err
 		}
 	}
@@ -260,7 +261,7 @@ func writeTableSection(w io.Writer, s module.TableSection) error {
 				return err
 			}
 		default:
-			return fmt.Errorf("illegal table element type")
+			return errors.New("illegal table element type")
 		}
 		if err := writeLimits(&buf, table.Lim); err != nil {
 			return err
@@ -588,7 +589,7 @@ func writeImport(w io.Writer, imp module.Import) error {
 		}
 		return writeByte(w, constant.Const)
 	default:
-		return fmt.Errorf("illegal import descriptor type")
+		return errors.New("illegal import descriptor type")
 	}
 }
 
