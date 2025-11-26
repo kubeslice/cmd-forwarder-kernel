@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.4
-FROM --platform=$BUILDPLATFORM golang:1.22.5 as go
+FROM --platform=$BUILDPLATFORM golang:1.25 as go
 ARG BUILDPLATFORM
 ARG TARGETPLATFORM
 ARG TARGETARCH
